@@ -1,0 +1,305 @@
+---
+title: "GIS_Coursework"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Impact of the Coronavirus Pandemic on Crime
+This research aims to better understand the impacts of the coronavirus-related social restriction on crime. 
+
+# Part 1: Loading data of COVID-19 
+It is simple to load CSV file by R
+```{r}
+# loading the CSV file of covid-19 
+Covid_19_cases<- read.csv("data/cases_london by month.csv",
+                          header = TRUE,
+                          sep = ",",
+                          encoding = "latin1")
+```
+
+This CSV file was downloaded from London Datastore. URL:https://data.london.gov.uk/download/coronavirus--covid-19--cases/151e497c-a16e-414e-9e03-9e428f555ae9/phe_cases_london_boroughs.csv 
+
+The data have been processed by Excel. I create a PivotTable by selecting boroughs as rows. As for columns, I calculated the total number of cases monthly
+
+Then I plot the bar charts of covid-19 to check their distributions.
+```{r}
+# selecting columns'month'
+month<-factor(Covid_19_cases$month,levels=Covid_19_cases$month)
+# After plotting, I find the x-axis placing in alphabetical order， rather than time series. So I use  'levels=Covid_19_cases$month' to make the order correctly.
+number1_covid<-(Covid_19_cases$total_cases)/1000
+# Resize the number of cases
+df1<-data.frame(month,number1_covid)
+library(ggplot2)
+ggplot(df1,aes(month,number1_covid))+
+  geom_bar(stat="identity",fill="steelblue")+
+  # setting the labels
+  labs(title = 'Total COVID-19 Cases in London by Month', x = 'month', y = 'monthly counts, London*1000' )+
+  # adding the title
+  theme(plot.title = element_text(size = 20,colour = "black",hjust = 0.5))
+```
+
+I also plotting the confirmed cases by boroughs
+```{r}
+Covid_cases<- read.csv("data/cases_london by boroughs.csv",
+                          header = TRUE,
+                          sep = ",",
+                          encoding = "latin1")
+#selecting the borough names and the confirmed number
+boroughs_name1<-factor(Covid_cases$area_name,levels=Covid_cases$area_name)
+number2_covid<-Covid_cases$total_cases
+df2<-data.frame(number2_covid,boroughs_name1)
+ggplot(df2,aes(number2_covid,boroughs_name1))+
+  geom_bar(stat="identity",fill="steelblue")+
+  labs(title = 'Total COVID-19 Cases by Boroughs up to 30/11/2020', x = 'number of cases', y = 'boroughs name' )+
+  theme(plot.title = element_text(size = 20,colour = "black",hjust = 0.5))
+```
+
+I focuse on the accumulative value in last day
+
+# Part 2: Loading the information about London boroughs
+
+It is simple to read shapefile in R
+```{r}
+library(sf)
+LondonBorough <- st_read(here::here("data",
+                                    "statistical-gis-boundaries-london",
+                                    "ESRI",
+                                    "London_Borough_Excluding_MHW.shp"))
+```
+
+This CSV file was downloaded from London Datastore. URL:https://data.london.gov.uk/download/statistical-gis-boundary-files-london/9ba8c833-6370-4b11-abdc-314aa020d5e0/statistical-gis-boundaries-london.zip
+
+# Part 3: Load data of crime
+```{r}
+Crimes<- read.csv("data/MPS Ward Level Crime_edit.csv",
+                  header = TRUE,
+                  sep = ",",
+                  encoding = "latin1")
+```
+This CSV file was downloaded from London Datastore.URL:https://data.london.gov.uk/download/recorded_crime_summary/d2e9ccfc-a054-41e3-89fb-53c2bc3ed87a/MPS%20Borough%20Level%20Crime%20%28most%20recent%2024%20months%29.csv
+
+The data have been processed by Excel.I create a PivotTable by selecting boroughs as rows. As for columns, we just focus on ten major categories and record monthly. And I also create a new column called total cases which is the sum of offences in each borough.
+
+# Part 4: Merging dataframe and connect to map
+```{r}
+#merge by common column
+covid_crimes=merge(Covid_cases,Crimes,by.x="area_code",by.y="area_code")
+# then put the covid_crime data into the map,  using the function of 'left_join' 
+library(tidyverse)
+LondonBoroughcases <- LondonBorough%>%
+  left_join(.,
+            covid_crimes,
+            by = c("GSS_CODE" = "area_code"))
+```
+
+NOW, we can plot the map
+```{r}
+# checking the information about covid-19
+g = ggplot(LondonBoroughcases) +
+  # filled by the number of covid-19 cases
+  geom_sf(aes(fill = total_cases)) +
+  #choosing the patette of 'spectral'
+  scale_fill_distiller("total_cases", palette = "Spectral") +
+  ggtitle("covid_19_cases by boroughs")
+g
+
+#checking the information about crime
+f = ggplot(LondonBoroughcases) +
+  # filled by the number of crime cases
+  geom_sf(aes(fill = Crime_cases)) +
+  #choosing the patette of 'spectral'
+  scale_fill_distiller("total_cases", palette = "Spectral") +
+  ggtitle("Crime_cases by boroughs")
+f
+```
+
+# Part 5: The structure breaks
+```{r}
+#loading data
+Break_points<- read.csv("data/MPS Ward Level Crime_breakpoint.csv",
+               header = TRUE,
+               sep = ",",
+               encoding = "latin1")
+```
+
+Converting Data on Energy Consumption to a Time Series Object
+```{r}
+# Define Arson and Criminal Damage (ACD) as a Time Series Object
+ACD<-ts(Break_points$Arson.and.Criminal.Damage,frequency=12,start=c(2018,12))
+#Define Burglary (B) as a Time Series Object
+B<-ts(Break_points$Burglary,frequency=12,start=c(2018,12))
+#Define Drug Offences (DO) as a Time Series Object
+DO<-ts(Break_points$Drug.Offences,frequency=12,start=c(2018,12))
+#Define Possession of Weapons (PW) as a Time Series Object
+PW<-ts(Break_points$Possession.of.Weapons,frequency=12,start=c(2018,12))
+#Define Robbery (R) as a Time Series Object
+R<-ts(Break_points$Robbery,frequency=12,start=c(2018,12))
+#Define Public Order Offences (POO) as a Time Series Object
+POO<-ts(Break_points$Public.Order.Offences,frequency=12,start=c(2018,12))
+#Define Sexual Offences (SO) as a Time Series Object
+SO<-ts(Break_points$Sexual.Offences,frequency=12,start=c(2018,12))
+#Define Theft (T) as a Time Series Object
+T<-ts(Break_points$Theft,frequency=12,start=c(2018,12))
+#Define Vehicle Offences (VO) as a Time Series Object
+VO<-ts(Break_points$Vehicle.Offences,frequency=12,start=c(2018,12))
+#Define Violence Against the Person (VAP) as a Time Series Object
+VAP<-ts(Break_points$Violence.Against.the.Person,frequency=12,start=c(2018,12))
+```
+
+Plotting Data by Different Types of Crime
+```{r}
+#Plotting Data  by Different Types of Crime
+plot(cbind(ACD, B, DO, PW, R, POO, SO, T, VO, VAP),
+     main='Different Types of Crime in Time Series')
+```
+
+Identifying the breakpoints
+```{r}
+library(strucchange)
+# Finding Structural Breaks in Arson and Criminal Damage (ACD)
+ACD_bp<-breakpoints(ACD~1)
+summary(ACD_bp)
+# Plotting Structural Breaks in Arson and Criminal Damage (ACD)
+ACD_ci <- confint(ACD_bp)
+plot(ACD,type="l",las=1,xaxs="i",yaxs="i",xlab="time",ylab="total cases of ACD",col="blue")
+lines(ACD_bp)
+lines(ACD_ci)
+```
+```{r}
+# Finding Structural Breaks in Burglary (B)
+B_bp<-breakpoints(B~1)
+summary(B_bp)
+# Plotting Structural Breaks in Burglary (B)
+B_ci <- confint(B_bp)
+plot(B,type="l",las=1,xaxs="i",yaxs="i",xlab="time",ylab="total cases of B",col="blue")
+lines(B_bp)
+lines(B_ci)
+```
+```{r}
+# Finding Structural in Drug Offences (DO) 
+DO_bp<-breakpoints(DO~1)
+summary(DO_bp)
+# Plotting Structural Breaks in Drug Offences (DO) 
+DO_ci <- confint(DO_bp)
+plot(DO,type="l",las=1,xaxs="i",yaxs="i",xlab="time",ylab="total cases of DO",col="blue")
+lines(DO_bp)
+lines(DO_ci)
+```
+```{r}
+# Finding Structural in Possession of Weapons (PW) 
+PW_bp<-breakpoints(PW~1)
+summary(PW_bp)
+# Plotting Structural Breaks in Possession of Weapons (PW) 
+PW_ci <- confint(PW_bp)
+plot(PW,type="l",las=1,xaxs="i",yaxs="i",xlab="time",ylab="total cases of PW",col="blue")
+lines(PW_bp)
+lines(PW_ci)
+```
+```{r}
+# Finding Structural in Robbery (R) 
+R_bp<-breakpoints(R~1)
+summary(R_bp)
+# Plotting Structural Breaks in Robbery (R) 
+R_ci <- confint(R_bp)
+plot(R,type="l",las=1,xaxs="i",yaxs="i",xlab="time",ylab="total cases of R",col="blue")
+lines(R_bp)
+lines(R_ci)
+```
+```{r}
+# Finding Structural in Public Order Offences (POO)
+POO_bp<-breakpoints(POO~1)
+summary(POO_bp)
+# Plotting Structural Breaks in Public Order Offences (POO) 
+POO_ci <- confint(POO_bp)
+plot(POO,type="l",las=1,xaxs="i",yaxs="i",xlab="time",ylab="total cases of POO",col="blue")
+lines(POO_bp)
+lines(POO_ci)
+```
+```{r}
+# Finding Structural in Sexual Offences (SO)
+SO_bp<-breakpoints(SO~1)
+summary(SO_bp)
+# Plotting Structural Breaks in Sexual Offences (SO) 
+SO_ci <- confint(SO_bp)
+plot(SO,type="l",las=1,xaxs="i",yaxs="i",xlab="time",ylab="total cases of SO",col="blue")
+lines(SO_bp)
+lines(SO_ci)
+```
+```{r}
+# Finding Structural in Theft (T) 
+T_bp<-breakpoints(T~1)
+summary(T_bp)
+# Plotting Structural Breaks in Theft (T)  
+T_ci <- confint(T_bp)
+plot(T,type="l",las=1,xaxs="i",yaxs="i",xlab="time",ylab="total cases of T",col="blue")
+lines(T_bp)
+lines(T_ci)
+```
+```{r}
+# Finding Structural in Vehicle Offences (VO) 
+VO_bp<-breakpoints(VO~1)
+summary(VO_bp)
+# Plotting Structural Breaks in Vehicle Offences (VO)  
+VO_ci <- confint(VO_bp)
+plot(VO,type="l",las=1,xaxs="i",yaxs="i",xlab="time",ylab="total cases of VO",col="blue")
+lines(VO_bp)
+lines(VO_ci)
+```
+```{r}
+# Finding Structural in Violence Against the Person (VAP)
+VAP_bp<-breakpoints(VAP~1)
+summary(VAP_bp)
+# Plotting Structural Breaks in Violence Against the Person (VAP)  
+VAP_ci <- confint(VAP_bp)
+plot(VAP,type="l",las=1,xaxs="i",yaxs="i",xlab="time",ylab="total cases of VAP",col="blue")
+lines(VAP_bp)
+lines(VAP_ci)
+```
+
+# Part 6: The related changes
+```{r}
+#loading data
+related_changes<- read.csv("data/MPS Ward Level Crime_related changes.csv",
+                          header = TRUE,
+                          sep = ",",
+                          encoding = "latin1")
+LondonBoroughcrimes <- LondonBorough%>%
+  left_join(.,
+            related_changes,
+            by = c("NAME" = "boroughs_name"))
+```
+```{r}
+# plotting the related changes on London boroughs
+h = ggplot(LondonBoroughcrimes) +
+  # selecting the crime of Drug Offences (DO)
+  geom_sf(aes(fill = DO)) +
+  # selecting the palette of 'PiYG'
+  scale_fill_distiller("DO", palette = "PiYG") +
+  ggtitle("the related change of Drug Offences by boroughs")
+h
+j = ggplot(LondonBoroughcrimes) +
+  # selecting the crime of Burglary (B)
+  geom_sf(aes(fill = B)) +
+  # selecting the palette of 'PiYG'
+  scale_fill_distiller("B", palette = "PiYG") +
+  ggtitle("the related change of Burglary by boroughs")
+j
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
